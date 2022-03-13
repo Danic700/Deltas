@@ -32,93 +32,6 @@ class Epoch:
             assert (len(raw_epoch_data[2]) == raw_epoch_data[1])
             assert (len(raw_epoch_data[4]) == raw_epoch_data[3])
 
-    def copy(self):
-        '''
-        Create deep copy
-        '''
-        return copy.deepcopy(self)
-
-    def _change_list_to_page_writes(self, change_list, page_size=4096):
-        shift = int(math.log(page_size, 2))
-        page_writes = {}
-        for c in change_list:
-            key = c[0] >> shift;
-            if not key in page_writes:
-                page_writes[key] = 1
-            else:
-                page_writes[key] = page_writes[key] + 1
-            assert page_writes[key] <= 64
-        return page_writes
-
-    def _change_list_to_write_density(self, change_list, page_size=4096):
-        '''
-        Take a change list and merge to derive page write densities
-        '''
-        assert (type(change_list) == list)
-
-        result = {}
-        # coalesce to pages
-        page_writes = self._change_list_to_page_writes(change_list, page_size)
-
-        density_list = []
-        for c in page_writes.values():
-            assert type(c) == int
-            assert c <= (page_size / 64)
-            density_list.append(c / (page_size / 64))
-        result["clwr_count"] = len(change_list)
-        result["pagewr_count"] = len(page_writes)
-        if len(density_list) > 0:
-            result["density_mean"] = np.mean(density_list)
-            result["density_max"] = np.max(density_list)
-            result["density_min"] = np.min(density_list)
-        else:
-            result["density_mean"] = 0
-            result["density_max"] = 0
-            result["density_min"] = 0
-        return result
-
-    def merge_later(self, later_epoch):
-        '''
-        Merge a later epoch (this overrides existing change entries with 
-        thos in the provided change data)
-        '''
-        assert type(later_epoch) == Epoch
-
-        # raw_epoch_data overrides existing
-        table = {}
-        for i in self.user_cl_changes:
-            table[i[0]] = i
-
-        for i in later_epoch.user_cl_changes:
-            table[i[0]] = i
-
-        self.user_cl_changes = []
-        for entry in table.values():
-            self.user_cl_changes.append(entry)
-
-        table.clear()
-        for i in self.kern_cl_changes:
-            table[i[0]] = i
-
-        for i in later_epoch.kern_cl_changes:
-            table[i[0]] = i
-
-        self.kern_cl_changes = []
-        for entry in table.values():
-            self.kern_cl_changes.append(entry)
-
-    def k_write_density(self, page_size=4096):
-        '''
-        Summarize kernel page write densities
-        '''
-        return self._change_list_to_write_density(self.kern_cl_changes, page_size)
-
-    def u_write_density(self, page_size=4096):
-        '''
-        Summarize user page write densities
-        '''
-        return self._change_list_to_write_density(self.user_cl_changes, page_size)
-
 
 def load(filename):
     '''
@@ -139,7 +52,6 @@ def load(filename):
 
 
 def count_cls(dictionary, cl_changes):
-
     for cl in cl_changes:
         key = cl[2]
         if key in dictionary.keys():
@@ -149,47 +61,90 @@ def count_cls(dictionary, cl_changes):
 
 def plot_popular_cls(filename):
     epochs = load(filename)
-    num_of_cls_processed = 0
-    bucket2to10 = {}
-    epoch_num = 0
+    kern_cls_processed = []
+    prev_kern_cls_processed = 0
+    list2to10 = []
+    list11to100 = []
+    list101to1000 = []
+    list1001 = []
     kernel_dictionary = {}
+    stop_index = 0
     user_dictionary = {}
     for epoch in epochs:
-        epoch_num += 1
+        if stop_index == 600:
+            break
+        else:
+            stop_index = stop_index + 1
+
         kern_cl_changes = epoch.kern_cl_changes
-        user_cl_changes = epoch.user_cl_changes
+       # user_cl_changes = epoch.user_cl_changes
         count_cls(kernel_dictionary, kern_cl_changes)
-        count_cls(user_dictionary, user_cl_changes)
+       # count_cls(user_dictionary, user_cl_changes)
         bucket2to10 = dict((k, v) for k, v in kernel_dictionary.items() if 1 < v < 11)
-        with open(f'csvs/epoch{epoch_num}.csv', 'w') as f:
-            for key in bucket2to10.keys():
-                f.write("%s, %s\n" % (key, bucket2to10[key]))
+        avg = np.mean(list(bucket2to10.values()))
+        list2to10.append((avg, len(bucket2to10)))
 
-    kernel_dictionary = dict((k, v) for k, v in kernel_dictionary.items())
-    data_items = kernel_dictionary.items()
-    data_list = list(data_items)
-    kernel_df = pd.DataFrame(data_list,  columns=["CL", "COUNT"])
+        bucket11to100 = dict((k, v) for k, v in kernel_dictionary.items() if 10 < v < 101)
+        avg = np.mean(list(bucket11to100.values()))
+        list11to100.append((avg, len(bucket11to100)))
+
+        bucket101to1000 = dict((k, v) for k, v in kernel_dictionary.items() if 100 < v < 1001)
+        avg = np.mean(list(bucket101to1000.values()))
+        list101to1000.append((avg, len(bucket101to1000)))
+
+        bucket1001 = dict((k, v) for k, v in kernel_dictionary.items() if v > 1000)
+        avg = np.mean(list(bucket1001.values()))
+        list1001.append((avg, len(bucket1001)))
+
+
+        kern_cls_processed.append(len(kern_cl_changes) + prev_kern_cls_processed)
+        prev_kern_cls_processed = kern_cls_processed[-1]
 
 
 
-    user_dictionary = dict((k, v) for k, v in user_dictionary.items() if v >= 100)
-    data_items = user_dictionary.items()
-    data_list = list(data_items)
-    user_df = pd.DataFrame(data_list, columns=["CL", "COUNT"])
+    df2to10 = pd.DataFrame.from_records(list2to10, columns=['Average', 'CL Appearances'])
+    df2to10['Buffer Type'] = '2to10 Buffer'
+    df2to10 = df2to10.set_index('Buffer Type', append=True).unstack('Buffer Type')
 
-    kernel_df.to_csv("kernel_cls", sep='\t')
-    user_df.to_csv("user_cls", sep='\t')
+    df11to100 = pd.DataFrame.from_records(list11to100, columns=['Average', 'CL Appearances'])
+    df11to100['Buffer Type'] = '11to100 Buffer'
+    df11to100 = df11to100.set_index('Buffer Type', append=True).unstack('Buffer Type')
 
-    df = pd.concat([user_df, kernel_df], axis=0, ignore_index=True)
-    grouped_df = df.groupby(['CL'])['COUNT'].sum().reset_index()
+    df101to1000 = pd.DataFrame.from_records(list101to1000, columns=['Average', 'CL Appearances'])
+    df101to1000['Buffer Type'] = '101to1000 Buffer'
+    df101to1000 = df101to1000.set_index('Buffer Type', append=True).unstack('Buffer Type')
 
-    return grouped_df;
+    df1001 = pd.DataFrame.from_records(list1001, columns=['Average', 'CL Appearances'])
+    df1001['Buffer Type'] = '1001+ Buffer'
+    df1001 = df1001.set_index('Buffer Type', append=True).unstack('Buffer Type')
+
+    df = pd.concat([df2to10, df11to100, df101to1000, df1001], axis=1)
+    df['CLs Processed'] = np.array(kern_cls_processed).tolist()
+    df.to_csv('out.csv', index=False)
+
+
+    # kernel_dictionary = dict((k, v) for k, v in kernel_dictionary.items())
+    # data_items = kernel_dictionary.items()
+    # data_list = list(data_items)
+    # kernel_df = pd.DataFrame(data_list,  columns=["CL", "COUNT"])
+    #
+    #
+    #
+    # user_dictionary = dict((k, v) for k, v in user_dictionary.items() if v >= 100)
+    # data_items = user_dictionary.items()
+    # data_list = list(data_items)
+    # user_df = pd.DataFrame(data_list, columns=["CL", "COUNT"])
+    #
+    # kernel_df.to_csv("kernel_cls", sep='\t')
+    # user_df.to_csv("user_cls", sep='\t')
+    #
+    # df = pd.concat([user_df, kernel_df], axis=0, ignore_index=True)
+    # grouped_df = df.groupby(['CL'])['COUNT'].sum().reset_index()
+    #
+    # return grouped_df;
 
 
 
 
 
 plot_popular_cls('./phoronix-ebizzy.deltas')
-
-
-#plot_density('./phoronix-ebizzy.deltas', "Cache Lines")
