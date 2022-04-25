@@ -19,6 +19,7 @@ from collections import Counter
 
 from numpy import NaN
 
+MAX_SYMBOL_SIZE = 64
 
 class Epoch:
     '''
@@ -55,27 +56,29 @@ def load(filename):
     return epochs
 
 
-def count_cls(dictionary, cl_changes):
+def count_cls(dictionary, cl_changes, symbol_index):
     for cl in cl_changes:
-        key = cl[2]
+        key = cl[3][symbol_index]                ##take cl from split symbol array
         if key in dictionary.keys():
             dictionary[key] += 1
         else:
             dictionary[key] = 1
 
 
-def split_deltas(filename, symbol_size):
-    epochs = load(filename)
-    data = epochs[0].kern_cl_changes[0][2]
-    info = [data[i:i + symbol_size] for i in range(0, len(data), symbol_size)]
-    t = epochs[0].kern_cl_changes[0]
-    epochs[0].kern_cl_changes[0] = t + (info,)
-    print(info)
+def split_deltas(epochs, symbol_size):
+    for epoch in epochs:
+        j = 0
+        kern_cl_changes = epoch.kern_cl_changes
+        for cl_tuple in kern_cl_changes:
+            kern_bytes = cl_tuple[2]
+            if kern_bytes == b'':       ##this means the last epoch
+                 break
+            split_bytes = [kern_bytes[i:i + symbol_size] for i in range(0, len(kern_bytes), symbol_size)]
+            epoch.kern_cl_changes[j] = cl_tuple + (split_bytes,)
+            j += 1
 
 
-
-def plot_popular_cls(filename):
-    epochs = load(filename)
+def plot_popular_cls(epochs , symbol_index):
     kern_cls_processed = []
     prev_kern_cls_processed = 0
     list1to1 = []
@@ -94,7 +97,7 @@ def plot_popular_cls(filename):
         kern_cl_changes = epoch.kern_cl_changes
         kern_cl_sum = kern_cl_sum + epoch.total_kern_changes
 
-        count_cls(kernel_dictionary, kern_cl_changes)
+        count_cls(kernel_dictionary, kern_cl_changes, symbol_index)
 
         bucket1to1 = dict((k, v) for k, v in kernel_dictionary.items() if v == 1)
         avg = np.mean(list(bucket1to1.values()))
@@ -166,7 +169,7 @@ def plot_popular_cls(filename):
 
     df = pd.concat([df2to10, df11to100, df101to1000, df1001], axis=1)
     df['CLs Processed'] = np.array(kern_cls_processed).tolist()
-    df.to_csv('out.csv', index=False)
+    df.to_csv(f'out{symbol_index}.csv', index=False)
 
     # kernel_dictionary = dict((k, v) for k, v in kernel_dictionary.items())
     # data_items = kernel_dictionary.items()
@@ -188,6 +191,9 @@ def plot_popular_cls(filename):
     #
     # return grouped_df;
 
-
-##split_deltas('./phoronix-ebizzy.deltas', 32)
-plot_popular_cls('./phoronix-ebizzy.deltas')
+filename = './phoronix-ebizzy.deltas'
+symbol_size = 32
+epochs = load(filename)
+split_deltas(epochs, symbol_size)
+for i in range(0, MAX_SYMBOL_SIZE // symbol_size):
+    plot_popular_cls(epochs, i)
