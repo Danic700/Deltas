@@ -56,19 +56,22 @@ def load(filename):
     return epochs
 
 
-def count_cls(dictionary, cl_changes, symbol_index):
+def count_cls(dictionary, cl_changes):
     for cl in cl_changes:
-        key = cl[3][symbol_index]                ##take cl from split symbol array
-        if key in dictionary.keys():
-            dictionary[key] += 1
-        else:
-            dictionary[key] = 1
+        split_cl_array = cl[3]
+        for split_cl in split_cl_array:
+            key = split_cl                ##take cl from split symbol array
+            if key in dictionary.keys():
+                dictionary[key] += 1
+            else:
+                dictionary[key] = 1
 
 
 def split_deltas(epochs, symbol_size):
     for epoch in epochs:
         j = 0
         kern_cl_changes = epoch.kern_cl_changes
+        epoch.total_kern_changes = epoch.total_kern_changes * (MAX_SYMBOL_SIZE // symbol_size) ## number of kern_cl_change grows when working with different symbol size
         for cl_tuple in kern_cl_changes:
             kern_bytes = cl_tuple[2]
             if kern_bytes == b'':       ##this means the last epoch
@@ -78,7 +81,7 @@ def split_deltas(epochs, symbol_size):
             j += 1
 
 
-def plot_popular_cls(epochs , symbol_index):
+def plot_popular_cls(epochs):
     kern_cls_processed = []
     prev_kern_cls_processed = 0
     list1to1 = []
@@ -95,9 +98,9 @@ def plot_popular_cls(epochs , symbol_index):
     for epoch in epochs:
 
         kern_cl_changes = epoch.kern_cl_changes
-        kern_cl_sum = kern_cl_sum + epoch.total_kern_changes
+        kern_cl_sum = kern_cl_sum + epoch.total_kern_changes   ## total
 
-        count_cls(kernel_dictionary, kern_cl_changes, symbol_index)
+        count_cls(kernel_dictionary, kern_cl_changes)
 
         bucket1to1 = dict((k, v) for k, v in kernel_dictionary.items() if v == 1)
         avg = np.mean(list(bucket1to1.values()))
@@ -133,7 +136,7 @@ def plot_popular_cls(epochs , symbol_index):
         compression_ratio = (np.sum(list(bucket1001.values())) * avg) / kern_cl_sum
         list1001.append((avg, len(bucket1001), compression_ratio))
 
-        kern_cls_processed.append(len(kern_cl_changes) + prev_kern_cls_processed)
+        kern_cls_processed.append(len(kern_cl_changes) * (MAX_SYMBOL_SIZE // symbol_size) + prev_kern_cls_processed)
         prev_kern_cls_processed = kern_cls_processed[-1]
 
         if stop_index == 600:
@@ -144,7 +147,7 @@ def plot_popular_cls(epochs , symbol_index):
                      + list101to1000[stop_index][1]*list101to1000[stop_index][0] + \
                      list1001[stop_index][1]*list1001[stop_index][0]
             singleton = list1to1[stop_index][1]*list1to1[stop_index][0]
-            if singleton + sanity == kern_cl_sum:
+            if math.floor(sanity + singleton) == kern_cl_sum or math.ceil(sanity + singleton) == kern_cl_sum:
                 print("sanity check")
             else:
                 print("bad sum")
@@ -169,7 +172,7 @@ def plot_popular_cls(epochs , symbol_index):
 
     df = pd.concat([df2to10, df11to100, df101to1000, df1001], axis=1)
     df['CLs Processed'] = np.array(kern_cls_processed).tolist()
-    df.to_csv(f'out{symbol_index}.csv', index=False)
+    df.to_csv(f'out{symbol_size}.csv', index=False)
 
     # kernel_dictionary = dict((k, v) for k, v in kernel_dictionary.items())
     # data_items = kernel_dictionary.items()
@@ -192,8 +195,8 @@ def plot_popular_cls(epochs , symbol_index):
     # return grouped_df;
 
 filename = './phoronix-ebizzy.deltas'
-symbol_size = 32
+symbol_sizes = [64]
 epochs = load(filename)
-split_deltas(epochs, symbol_size)
-for i in range(0, MAX_SYMBOL_SIZE // symbol_size):
-    plot_popular_cls(epochs, i)
+for symbol_size in symbol_sizes:
+    split_deltas(epochs, symbol_size)
+    plot_popular_cls(epochs)
