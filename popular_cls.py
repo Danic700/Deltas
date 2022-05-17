@@ -77,7 +77,7 @@ def split_deltas(epochs, symbol_size):
             if kern_bytes == b'':       ##this means the last epoch
                  break
             split_bytes = [kern_bytes[i:i + symbol_size] for i in range(0, len(kern_bytes), symbol_size)]
-            epoch.kern_cl_changes[j] = cl_tuple + (split_bytes,)
+            epoch.kern_cl_changes[j] = cl_tuple + (split_bytes,)  ## add another member to the tuple
             j += 1
 
 
@@ -95,6 +95,7 @@ def plot_popular_cls(epochs):
     kern_cl_sum = 0
     kern_cls = []
     compression_ratio = 0
+    compression_ratio_array = []
     for epoch in epochs:
 
         kern_cl_changes = epoch.kern_cl_changes
@@ -113,40 +114,44 @@ def plot_popular_cls(epochs):
         if math.isnan(avg):
             avg = 0
         compression_ratio = (np.sum(list(bucket2to10.values())) * avg) / kern_cl_sum
-        list2to10.append((avg, len(bucket2to10), compression_ratio))
+        list2to10.append((avg, len(bucket2to10)))
 
         bucket11to100 = dict((k, v) for k, v in kernel_dictionary.items() if 10 < v < 101)
         avg = np.mean(list(bucket11to100.values()))
         if math.isnan(avg):
             avg = 0
         compression_ratio = (np.sum(list(bucket11to100.values())) * avg) / kern_cl_sum
-        list11to100.append((avg, len(bucket11to100), compression_ratio))
+        list11to100.append((avg, len(bucket11to100)))
 
         bucket101to1000 = dict((k, v) for k, v in kernel_dictionary.items() if 100 < v < 1001)
         avg = np.mean(list(bucket101to1000.values()))
         if math.isnan(avg):
             avg = 0
         compression_ratio = (np.sum(list(bucket101to1000.values())) * avg) / kern_cl_sum
-        list101to1000.append((avg, len(bucket101to1000), compression_ratio))
+        list101to1000.append((avg, len(bucket101to1000)))
 
         bucket1001 = dict((k, v) for k, v in kernel_dictionary.items() if v > 1000)
         avg = np.mean(list(bucket1001.values()))
         if math.isnan(avg):
             avg = 0
         compression_ratio = (np.sum(list(bucket1001.values())) * avg) / kern_cl_sum
-        list1001.append((avg, len(bucket1001), compression_ratio))
+        list1001.append((avg, len(bucket1001)))
 
         kern_cls_processed.append(len(kern_cl_changes) * (MAX_SYMBOL_SIZE // symbol_size) + prev_kern_cls_processed)
         prev_kern_cls_processed = kern_cls_processed[-1]
 
+        ##calculate sanity
+        sanity = list2to10[stop_index][1] * list2to10[stop_index][0] \
+                 + list11to100[stop_index][1] * list11to100[stop_index][0] \
+                 + list101to1000[stop_index][1] * list101to1000[stop_index][0] + \
+                 list1001[stop_index][1] * list1001[stop_index][0]
+        singleton = list1to1[stop_index][1] * list1to1[stop_index][0]
+
+        compression_ratio = 1 - sanity/kern_cl_sum
+        compression_ratio_array.append(compression_ratio)
         if stop_index == 600:
             break
         else:
-            sanity = list2to10[stop_index][1]*list2to10[stop_index][0]\
-                     + list11to100[stop_index][1]*list11to100[stop_index][0] \
-                     + list101to1000[stop_index][1]*list101to1000[stop_index][0] + \
-                     list1001[stop_index][1]*list1001[stop_index][0]
-            singleton = list1to1[stop_index][1]*list1to1[stop_index][0]
             if math.floor(sanity + singleton) == kern_cl_sum or math.ceil(sanity + singleton) == kern_cl_sum:
                 print("sanity check")
             else:
@@ -154,25 +159,28 @@ def plot_popular_cls(epochs):
             stop_index = stop_index + 1
 
 
-    df2to10 = pd.DataFrame.from_records(list2to10, columns=['Average', 'CL Appearances', 'Compression Ratio'])
+    df2to10 = pd.DataFrame.from_records(list2to10, columns=['Average', 'CL Appearances'])
     df2to10['Buffer Type'] = '2to10 Buffer'
     df2to10 = df2to10.set_index('Buffer Type', append=True).unstack('Buffer Type')
 
-    df11to100 = pd.DataFrame.from_records(list11to100, columns=['Average', 'CL Appearances', 'Compression Ratio'])
+    df11to100 = pd.DataFrame.from_records(list11to100, columns=['Average', 'CL Appearances'])
     df11to100['Buffer Type'] = '11to100 Buffer'
     df11to100 = df11to100.set_index('Buffer Type', append=True).unstack('Buffer Type')
 
-    df101to1000 = pd.DataFrame.from_records(list101to1000, columns=['Average', 'CL Appearances', 'Compression Ratio'])
+    df101to1000 = pd.DataFrame.from_records(list101to1000, columns=['Average', 'CL Appearances'])
     df101to1000['Buffer Type'] = '101to1000 Buffer'
     df101to1000 = df101to1000.set_index('Buffer Type', append=True).unstack('Buffer Type')
 
-    df1001 = pd.DataFrame.from_records(list1001, columns=['Average', 'CL Appearances', 'Compression Ratio'])
+    df1001 = pd.DataFrame.from_records(list1001, columns=['Average', 'CL Appearances'])
     df1001['Buffer Type'] = '1001+ Buffer'
     df1001 = df1001.set_index('Buffer Type', append=True).unstack('Buffer Type')
 
     df = pd.concat([df2to10, df11to100, df101to1000, df1001], axis=1)
     df['CLs Processed'] = np.array(kern_cls_processed).tolist()
+    df['Compression Ratio'] = np.array(compression_ratio_array).tolist()
     df.to_csv(f'out{symbol_size}.csv', index=False)
+
+
 
     # kernel_dictionary = dict((k, v) for k, v in kernel_dictionary.items())
     # data_items = kernel_dictionary.items()
@@ -195,8 +203,7 @@ def plot_popular_cls(epochs):
     # return grouped_df;
 
 filename = './phoronix-ebizzy.deltas'
-symbol_sizes = [64]
+symbol_size = 2  ###sys.argv[1]   -- need to get the argument
 epochs = load(filename)
-for symbol_size in symbol_sizes:
-    split_deltas(epochs, symbol_size)
-    plot_popular_cls(epochs)
+split_deltas(epochs, symbol_size)
+plot_popular_cls(epochs)
