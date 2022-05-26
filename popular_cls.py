@@ -28,7 +28,7 @@ class Epoch:
 
     def __init__(self, raw_epoch_data=None):
         # epoch raw data format (diff-count, [(offset, old-CL-bytes, new-CL-bytes)]
-        if raw_epoch_data != None:
+        if raw_epoch_data is not None:
             self.number = raw_epoch_data[0]
             self.total_kern_changes = raw_epoch_data[3]
             self.user_cl_changes = raw_epoch_data[2]
@@ -60,7 +60,7 @@ def count_cls(dictionary, cl_changes):
     for cl in cl_changes:
         split_cl_array = cl[3]
         for split_cl in split_cl_array:
-            key = split_cl                ##take cl from split symbol array
+            key = split_cl                # take cl from split symbol array
             if key in dictionary.keys():
                 dictionary[key] += 1
             else:
@@ -69,16 +69,17 @@ def count_cls(dictionary, cl_changes):
 
 def split_deltas(epochs, symbol_size):
     for epoch in epochs:
-        j = 0
+        kernel_index = 0
+        user_index = 0
         kern_cl_changes = epoch.kern_cl_changes
-        epoch.total_kern_changes = epoch.total_kern_changes * (MAX_SYMBOL_SIZE // symbol_size) ## number of kern_cl_change grows when working with different symbol size
+        epoch.total_kern_changes = epoch.total_kern_changes * (MAX_SYMBOL_SIZE // symbol_size) # number of kern_cl_change grows when working with different symbol size
         for cl_tuple in kern_cl_changes:
             kern_bytes = cl_tuple[2]
-            if kern_bytes == b'':       ##this means the last epoch
+            if kern_bytes == b'':       # this means the last epoch
                  break
             split_bytes = [kern_bytes[i:i + symbol_size] for i in range(0, len(kern_bytes), symbol_size)]
-            epoch.kern_cl_changes[j] = cl_tuple + (split_bytes,)  ## add another member to the tuple
-            j += 1
+            epoch.kern_cl_changes[kernel_index] = cl_tuple + (split_bytes,)  # add another member to the tuple
+            kernel_index += 1
 
 
 def plot_popular_cls(epochs):
@@ -99,7 +100,7 @@ def plot_popular_cls(epochs):
     for epoch in epochs:
 
         kern_cl_changes = epoch.kern_cl_changes
-        kern_cl_sum = kern_cl_sum + epoch.total_kern_changes   ## total
+        kern_cl_sum = kern_cl_sum + epoch.total_kern_changes   # total
 
         count_cls(kernel_dictionary, kern_cl_changes)
 
@@ -138,7 +139,7 @@ def plot_popular_cls(epochs):
         list1001.append((avg, len(bucket1001)))
 
         kern_cls_processed.append(len(kern_cl_changes) * (MAX_SYMBOL_SIZE // symbol_size) + prev_kern_cls_processed)
-        prev_kern_cls_processed = kern_cls_processed[-1]
+        prev_kern_cls_processed = kern_cls_processed[-1]  ##last member of array is the newest previous cls processed
 
         ##calculate sanity
         sanity = list2to10[stop_index][1] * list2to10[stop_index][0] \
@@ -203,7 +204,7 @@ def plot_popular_cls(epochs):
     # return grouped_df;
 
 filename = './phoronix-ebizzy.deltas'
-symbol_size = 2  ###sys.argv[1]   -- need to get the argument
+symbol_size = 64  ###sys.argv[1]   -- need to get the argument
 epochs = load(filename)
 split_deltas(epochs, symbol_size)
 plot_popular_cls(epochs)
