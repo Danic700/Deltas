@@ -82,6 +82,36 @@ def split_deltas(epochs, symbol_size):
             kernel_index += 1
 
 
+def split_deltas1(epoch):
+    kernel_index = 0
+    user_index = 0
+    kern_cl_changes = epoch.kern_cl_changes
+    user_cl_changes = epoch.user_cl_changes
+    epoch.total_kern_changes = epoch.total_kern_changes * (MAX_SYMBOL_SIZE // symbol_size) # number of cl_change grows when working with different symbol size
+    epoch.total_user_cl_changes = epoch.total_user_cl_changes * (MAX_SYMBOL_SIZE // symbol_size)
+    split(epoch.kern_cl_changes)
+    split(epoch.user_cl_changes)
+
+    # for cl_tuple in kern_cl_changes:
+    #     kern_bytes = cl_tuple[2]
+    #     if kern_bytes == b'':       # this means the last epoch
+    #         break
+    #     split_bytes = [kern_bytes[i:i + symbol_size] for i in range(0, len(kern_bytes), symbol_size)]
+    #     epoch.kern_cl_changes[kernel_index] = cl_tuple + (split_bytes,)  # add another member to the tuple
+    #     kernel_index += 1
+
+
+def split(cl_changes):
+    index = 0
+    for cl_tuple in cl_changes:
+        cl_bytes = cl_tuple[2] # this is the modified cl
+        if bytes == b'':     # this means the last epoch
+            break
+        split_bytes = [cl_bytes[i:i + symbol_size] for i in range(0, len(cl_bytes), symbol_size)]
+        cl_changes[index] = cl_tuple + (split_bytes,)
+        index += 1
+
+
 def plot_popular_cls(epochs):
     kern_cls_processed = []
     prev_kern_cls_processed = 0
@@ -99,6 +129,7 @@ def plot_popular_cls(epochs):
     compression_ratio_array = []
     for epoch in epochs:
 
+        split_deltas1(epoch)
         kern_cl_changes = epoch.kern_cl_changes
         kern_cl_sum = kern_cl_sum + epoch.total_kern_changes   # total
 
@@ -150,7 +181,7 @@ def plot_popular_cls(epochs):
 
         compression_ratio = 1 - sanity/kern_cl_sum
         compression_ratio_array.append(compression_ratio)
-        if stop_index == 600:
+        if stop_index == epochs.__len__() - 2:
             break
         else:
             if math.floor(sanity + singleton) == kern_cl_sum or math.ceil(sanity + singleton) == kern_cl_sum:
@@ -203,8 +234,8 @@ def plot_popular_cls(epochs):
     #
     # return grouped_df;
 
-filename = './phoronix-ebizzy.deltas'
-symbol_size = 64  ###sys.argv[1]   -- need to get the argument
+filename = './phoronix-nettle-aes.deltas'
+symbol_size = 16  ###sys.argv[1]   -- need to get the argument
 epochs = load(filename)
-split_deltas(epochs, symbol_size)
+#split_deltas(epochs, symbol_size)
 plot_popular_cls(epochs)
