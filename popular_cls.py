@@ -7,14 +7,13 @@
 # !/usr/bin/python3.9
 import sys
 import pickle
-import os.path
+from os import getpid
 import math
-from fileinput import filename
+import time
+import multiprocessing
 
 import numpy as np
-import copy
 import pandas as pd
-import csv
 from collections import Counter
 
 from numpy import NaN
@@ -82,15 +81,15 @@ def split_deltas(epochs, symbol_size):
             kernel_index += 1
 
 
-def split_deltas1(epoch):
+def split_deltas1(epoch, symbol_size):
     kernel_index = 0
     user_index = 0
     kern_cl_changes = epoch.kern_cl_changes
     user_cl_changes = epoch.user_cl_changes
     epoch.total_kern_changes = epoch.total_kern_changes * (MAX_SYMBOL_SIZE // symbol_size) # number of cl_change grows when working with different symbol size
     epoch.total_user_cl_changes = epoch.total_user_cl_changes * (MAX_SYMBOL_SIZE // symbol_size)
-    split(epoch.kern_cl_changes)
-    split(epoch.user_cl_changes)
+    split(epoch.kern_cl_changes, symbol_size)
+    split(epoch.user_cl_changes, symbol_size)
 
     # for cl_tuple in kern_cl_changes:
     #     kern_bytes = cl_tuple[2]
@@ -101,7 +100,7 @@ def split_deltas1(epoch):
     #     kernel_index += 1
 
 
-def split(cl_changes):
+def split(cl_changes, symbol_size):
     index = 0
     for cl_tuple in cl_changes:
         cl_bytes = cl_tuple[2] # this is the modified cl
@@ -112,7 +111,7 @@ def split(cl_changes):
         index += 1
 
 
-def plot_popular_cls(epochs):
+def plot_popular_cls(epochs, symbol_size):
     kern_cls_processed = []
     prev_kern_cls_processed = 0
     list1to1 = []
@@ -129,7 +128,7 @@ def plot_popular_cls(epochs):
     compression_ratio_array = []
     for epoch in epochs:
 
-        split_deltas1(epoch)
+        split_deltas1(epoch, symbol_size)
         kern_cl_changes = epoch.kern_cl_changes
         kern_cl_sum = kern_cl_sum + epoch.total_kern_changes   # total
 
@@ -188,6 +187,8 @@ def plot_popular_cls(epochs):
                 print("sanity check")
             else:
                 print("bad sum")
+            print("epoch number:" + str(stop_index))
+            print("epoch time calculation (seconds):"  + str(time.perf_counter()))
             stop_index = stop_index + 1
 
 
@@ -234,8 +235,34 @@ def plot_popular_cls(epochs):
     #
     # return grouped_df;
 
-filename = './phoronix-nettle-aes.deltas'
-symbol_size = 16  ###sys.argv[1]   -- need to get the argument
-epochs = load(filename)
-#split_deltas(epochs, symbol_size)
-plot_popular_cls(epochs)
+
+if __name__ == "__main__":
+
+    filename = sys.argv[1] ## './phoronix-nettle-aes.deltas'
+    symbol_size = int(sys.argv[2])  ###sys.argv[1]   -- need to get the argument
+    print("filename is " + filename)
+    print("symbol_size is " + str(symbol_size))
+
+    start_time = time.perf_counter()
+    epochs = load(filename)
+    n = 300
+    split_epochs = [epochs[i * n:(i + 1) * n] for i in range((len(epochs) + n - 1) // n)]
+
+
+    #plot_popular_cls(epochs, symbol_size)   ## One process for debug
+
+    #Creates two processes
+    p1 = multiprocessing.Process(target=plot_popular_cls, args=(split_epochs[0], symbol_size, ))
+    p2 = multiprocessing.Process(target=plot_popular_cls, args=(split_epochs[1], symbol_size, ))
+
+    # Start processes
+    p1.start()
+    p2.start()
+
+    # Wait for processes
+    p1.join()
+    p2.join()
+
+
+    finish_time = time.perf_counter()
+    print(f"Program finished in {finish_time - start_time} seconds")
