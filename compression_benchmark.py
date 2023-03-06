@@ -21,8 +21,7 @@ import pandas as pd
 MAX_SYMBOL_SIZE = 64
 KERN_CL_CHANGES = 4
 USER_CL_CHANGES = 2
-running_serial_number = 0
-cl_dictionary = {}
+
 
 
 class Epoch:
@@ -73,26 +72,37 @@ if __name__ == "__main__":
 
     epochs = load(filename)
 
-    no_compression_result = compression_util.benchmark_no_compression(epochs, filename)
-    zlib_result = compression_util.benchmark_zlib(epochs, filename)
-    zstd_result = compression_util.benchmark_zstd(epochs, filename)
-    lz4_result = compression_util.benchmark_lz4(epochs, filename)
-    gzip_result = compression_util.benchmark_gzip(epochs, filename)
-    snappy_result = compression_util.benchmark_snappy(epochs, filename)
-    rle_result = compression_util.benchmark_rle(epochs, filename)
+    no_compression_result, all_bytes = compression_util.benchmark_no_compression(epochs, False)
+    no_compression_result_xor, all_bytes_xor = compression_util.benchmark_no_compression(epochs, True)
+    zlib_result = compression_util.benchmark(all_bytes, 'zlib')
+    zlib_result_xor = compression_util.benchmark(all_bytes_xor, 'zlib')
+    zstd_result = compression_util.benchmark(all_bytes, 'zstd')
+    zstd_result_xor = compression_util.benchmark(all_bytes_xor, 'zstd')
+    lz4_result = compression_util.benchmark(all_bytes, 'lz4')
+    lz4_result_xor = compression_util.benchmark(all_bytes_xor, 'lz4')
+    gzip_result = compression_util.benchmark(all_bytes, 'gzip')
+    gzip_result_xor = compression_util.benchmark(all_bytes_xor, 'gzip')
+    snappy_result = compression_util.benchmark(all_bytes, 'snappy')
+    snappy_result_xor = compression_util.benchmark(all_bytes_xor, 'snappy')
 
+    #rle_result = compression_util.benchmark_rle(epochs)
 
     df = pd.DataFrame([no_compression_result,
                        zlib_result,
+                       zlib_result_xor,
                        zstd_result,
+                       zstd_result_xor,
                        lz4_result,
+                       lz4_result_xor,
                        gzip_result,
+                       gzip_result_xor,
                        snappy_result,
-                       rle_result])
+                       snappy_result_xor])
+                       #rle_result])
     df_tilted = df.stack().unstack(0)
 
-    df.to_csv(f"{filename}-compression-benchmark.csv")
-    df_tilted.to_csv(f"{filename}tilted-compression-benchmark.csv")
+    df.to_csv('/home/danielc/delta-scripts-2/', f"{filename.split('/')[1]}-compression-benchmark.csv")
+    df_tilted.to_csv('/home/danielc/delta-scripts-2/', f"{filename[3:]}tilted-compression-benchmark.csv")
 
 
     finish_time = time.perf_counter()

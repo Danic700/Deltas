@@ -51,7 +51,12 @@ def decode_2(values, counts):
 
 
 def xor(byte1, byte2):
-    result = bytearray(64)
-    for i in range(64):
-        result[i] = byte1[i] ^ byte2[i]
+    byte_array_1 = bytearray(byte1)
+    byte_array_2 = bytearray(byte2)
+
+    # Perform XOR operation on each pair of bytes
+    result = bytearray()
+    for byte1, byte2 in zip(byte_array_1, byte_array_2):
+        result.append(byte1 ^ byte2)
+
     return result
